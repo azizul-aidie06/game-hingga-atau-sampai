@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wira Tatabahasa: Hingga vs Sampai</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #f0f4f8; margin: 0; padding: 20px; }
+        canvas { border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); background-color: #fff; }
+        .header { background: #2c3e50; color: white; padding: 15px; border-radius: 15px; margin-bottom: 20px; }
+        .instruksi { font-size: 1.1em; margin-bottom: 10px; color: #34495e; }
+        #status { font-weight: bold; color: #e67e22; }
+        .score-board { font-size: 1.5em; font-weight: bold; color: #2980b9; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>✍️ WIRA TATABAHASA</h1>
+        <p>Latihan Kata Sendi Nama: <b>Hingga</b> atau <b>Sampai</b>?</p>
+    </div>
+
+    <div class="instruksi">
+        ⬅️ Condong KIRI: <b>Hingga (A)</b> | Condong KANAN: <b>Sampai (B)</b> ➡️
+        <p id="status">Sila tunggu, AI sedang bersedia...</p>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="score" class="score-board">Markah: 0 / 15</div>
+
+<script>
+let video;
+let poseNet;
+let noseX = 0;
+let score = 0;
+let currentIndex = 0;
+let feedback = "Sedia, Wira?";
+let feedbackColor = "#2c3e50";
+let gameActive = false;
+let modelLoaded = false;
+
+// Data Soalan (A = Hingga, B = Sampai)
+const soalanLatihan = [
+    { s: "1. Abang nak tengok televisyen ________ pukul berapa ni?", jaw: "B" },
+    { s: "2. Pasukan bola sepak SK Gemilang mara ________ ke separuh akhir.", jaw: "A" },
+    { s: "3. Operasi perpustakaan dari pukul 8 pagi ________ 5 petang.", jaw: "A" },
+    { s: "4. Penatnya lari, rasa macam ________ tak cukup nafas!", jaw: "B" },
+    { s: "5. Projek dijangka siap dari bulan Mac ________ bulan Ogos.", jaw: "A" },
+    { s: "6. Adik ketawa terbahak-bahak ________ keluar air mata.", jaw: "A" },
+    { s: "7. Belajar ________ peringkat Ijazah Sarjana Muda.", jaw: "A" },
+    { s: "8. Jangan main basikal di luar ________ senja.", jaw: "B" },
+    { s: "9. Telur dibiarkan di dalam bekas ________ menetas.", jaw: "A" },
+    { s: "10. Baca dari muka surat pertama ________ muka surat terakhir.", jaw: "A" },
+    { s: "11. Asyik main permainan video ________ lupa makan nasi.", jaw: "B" },
+    { s: "12. Keretapi menghubungkan KL ________ sempadan negara.", jaw: "A" },
+    { s: "13. Lama bersiap, saya tunggu dekat luar ________ tertidur.", jaw: "B" },
+    { s: "14. Mesyuarat berlanjutan ________ pukul 1:00 petang.", jaw: "A" },
+    { s: "15. Pegawai terpaksa berjaga ________ pagi semalam.", jaw: "A" }
+];
+
+function setup() {
+    let canvas = createCanvas(640, 480);
+    canvas.parent('canvas-container');
+    video = createCapture(VIDEO);
+    video.size(width, height);
+    video.hide();
+
+    poseNet = ml5.poseNet(video, () => {
+        modelLoaded = true;
+        gameActive = true;
+        document.getElementById('status').innerText = "AI SEDIA! Gerakkan kepala anda ke kiri atau kanan.";
+    });
+
+    poseNet.on('pose', (results) => {
+        if (results.length > 0) {
+            noseX = results[0].pose.keypoints[0].position.x;
+        }
+    });
+}
+
+function draw() {
+    // Paparan Kamera (Diterbalikkan untuk Mirror Effect)
+    push();
+    translate(width, 0);
+    scale(-1, 1);
+    image(video, 0, 0, width, height);
+    
+    // Kawasan Sensor (Visualizer)
+    noStroke();
+    fill(46, 204, 113, 80); // Hijau Kiri
+    rect(width-150, 0, 150, height);
+    fill(231, 76, 60, 80); // Merah Kanan
+    rect(0, 0, 150, height);
+    pop();
+
+    if (gameActive && currentIndex < soalanLatihan.length) {
+        let data = soalanLatihan[currentIndex];
+        
+        // Papan Soalan
+        fill(255, 255, 255, 220);
+        stroke(44, 62, 80);
+        strokeWeight(3);
+        rect(50, 50, width - 100, 140, 15);
+
+        // Teks Soalan
+        noStroke();
+        fill(0);
+        textAlign(CENTER);
+        textSize(20);
+        textWrap(WORD);
+        text(data.s, width/2, 100, width - 120);
+
+        // Pilihan Jawapan
+        textSize(18);
+        text("⬅️ KIRI: HINGGA | KANAN: SAMPAI ➡️", width/2, 170);
+
+        // Logik Kawanan (Nose Tracking)
+        // NoseX < 200 (Kanan Skrin/Kiri User) | NoseX > 440 (Kiri Skrin/Kanan User)
+        if (noseX < 200) { 
+            prosesJawapan("A");
+        } else if (noseX > 440) {
+            prosesJawapan("B");
+        }
+
+        // Maklum Balas
+        fill(feedbackColor);
+        textSize(26);
+        text(feedback, width/2, height - 50);
+    } else if (currentIndex >= soalanLatihan.length) {
+        tamatPermainan();
+    }
+}
+
+function prosesJawapan(pilihan) {
+    let betul = soalanLatihan[currentIndex].jaw;
+    gameActive = false; // Henti sekejap input
+
+    if (pilihan === betul) {
+        score++;
+        feedback = "✅ TEPAT SEKALI!";
+        feedbackColor = "#27ae60";
+        document.getElementById('score').innerText = "Markah: " + score + " / 15";
+    } else {
+        feedback = "❌ KURANG TEPAT!";
+        feedbackColor = "#c0392b";
+    }
+
+    setTimeout(() => {
+        currentIndex++;
+        if (currentIndex < soalanLatihan.length) {
+            gameActive = true;
+            feedback = "Sedia untuk soalan seterusnya...";
+            feedbackColor = "#2c3e50";
+        }
+    }, 2000);
+}
+
+function tamatPermainan() {
+    fill(255);
+    rect(0, 0, width, height);
+    fill(44, 62, 80);
+    textAlign(CENTER);
+    textSize(40);
+    text("TAHNIAH, WIRA!", width/2, height/2 - 50);
+    textSize(25);
+    text("Markah Akhir: " + score + " / 15", width/2, height/2 + 10);
+    
+    textSize(16);
+    let tip = score > 10 ? "Hebat! Anda faham perbezaan Hingga & Sampai." : "Teruskan berlatih! Hingga (masa/had), Sampai (tempat/tahap).";
+    text(tip, width/2, height/2 + 60);
+}
+</script>
+</body>
+</html>
